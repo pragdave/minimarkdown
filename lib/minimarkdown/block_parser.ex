@@ -1,7 +1,6 @@
 defmodule Minimarkdown.BlockParser do
 
-  alias Minimarkdown.Line,      as: Line
-  alias Minimarkdown.BlankLine, as: BlankLine
+  alias Minimarkdown.Line, as: Line
 
   @moduledoc """
   Take a stream of lines and determine each one's type and indentation
@@ -23,16 +22,13 @@ defmodule Minimarkdown.BlockParser do
     min_leading_spaces = 
       lines
       |> Enum.map(&(&1.leading_spaces))
-      |> Enum.min_by(fn leading_spaces -> 
-                        if leading_spaces == 0 do # blank lines don't count
-                          999_999
-                        else
-                          leading_spaces
-                        end
-                     end)
+      |> Enum.min
 
-    if min_leading_spaces == 999_999, do: min_leading_spaces = 0 # all lines blank
-    lines |> Enum.map(&Line.strip_leading_spaces(&1, min_leading_spaces))
+    if min_leading_spaces == Line.dummy_leading_spaces do
+      lines  # All lines blank...
+    else
+      lines |> Enum.map(&Line.strip_leading_spaces(&1, min_leading_spaces))
+    end
   end
 
   @doc """
@@ -45,21 +41,23 @@ defmodule Minimarkdown.BlockParser do
 
   defp _split_into_blocks([], blocks), do: recursive_reverse(blocks)
 
-  # ignore trailing blank line
-  defp _split_into_blocks([BlankLine[]], blocks), do: (IO.puts "trailing"; recursive_reverse(blocks))
-
   # add trailing non-blank to current block
   defp _split_into_blocks([line], [current_block|rest]) do
     _split_into_blocks([], [[line | current_block] | rest])
   end
 
   # ignore blank lines at start of block
-  defp _split_into_blocks([BlankLine[] | tail], blocks) do
+  defp _split_into_blocks([Line[type: :blank] | tail], blocks) do
     _split_into_blocks(tail, blocks)
   end
 
+  # A code block (a line starting ```) is terminated by another ``` line, and not a blank line)
+  defp _split_into_blocks([ line = Line[type: :code] | tail ], [ [] | rest ]) do
+    _split_into_code_block(tail, [ [line] | rest ])
+  end
+
   # a line followed by a blank line starts a new block
-  defp _split_into_blocks([line, BlankLine[] | tail], [current_block|rest]) do
+  defp _split_into_blocks([line, Line[type: :blank] | tail], [current_block|rest]) do
     _split_into_blocks(tail, [[], [line|current_block] | rest])
   end
 
@@ -68,13 +66,23 @@ defmodule Minimarkdown.BlockParser do
     _split_into_blocks(tail, [[line|current_block]|rest])
   end
 
+  ## Handle code blocks. A line starting ``` ends it, otherwise we just collect
+  defp _split_into_code_block([ line = Line[type: :code] | tail ], [ current_block | rest ]) do
+    _split_into_blocks(tail, [ [], [ line | current_block ] | rest  ])
+  end
+
+  defp _split_into_code_block([ line | tail ], [ current_block | rest ]) do
+    _split_into_code_block(tail, [ [ line | current_block ] | rest  ])
+  end
+
+  defp _split_into_code_block( [], code ) do
+    raise %b{Unterminated code block: #{code |> Enum.reverse |> Enum.map(fn x -> x.text end) |> Enum.join("\n")}}
+  end
 
   # The first rule here removes the empty block which was created to hold a new list
   defp recursive_reverse([[]|list]), do: recursive_reverse(list)
   defp recursive_reverse(list) do
-    list
-    |> Enum.reverse
-    |> Enum.map(&Enum.reverse/1)
+    list |> Enum.reverse |> Enum.map(&Enum.reverse/1)
   end
 
 end

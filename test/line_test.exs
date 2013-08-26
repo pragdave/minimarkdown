@@ -15,6 +15,6 @@ defmodule LineTest do
   end
 
   test "creates a blank line with no text" do
-    assert from_string("") == Minimarkdown.BlankLine[]
+    assert from_string("") == Minimarkdown.Line[type: :blank, leading_spaces: dummy_leading_spaces]
   end
 end

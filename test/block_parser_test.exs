@@ -104,4 +104,16 @@ defmodule BlockParserTest do
     result = split_into_blocks(in1 ++ blank ++ in2)
     assert result == [ in1, in2 ]
   end
+
+  test "code block with backquote delimters is stored as one block" do
+    input = ["line1", 
+             "", 
+             "``` elixir", "code", "", "more code", "```",
+             "",
+             "line2"
+    ] |> convert_to_line_records
+
+    result = split_into_blocks(input)
+    assert length(result) == 3
+  end
 end
